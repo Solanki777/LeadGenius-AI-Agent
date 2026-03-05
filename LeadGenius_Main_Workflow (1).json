@@ -1,0 +1,762 @@
+{
+  "name": "LeadGenius_Main_Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "leadgenius-upload",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "7970cd9c-fe4e-45f6-8160-4d7c057d992d",
+      "name": "Webhook",
+      "webhookId": "0483f22b-75a6-4327-b76d-5aa5e084c4e1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.ocr.space/parse/image",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "K86173449688957"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "binary",
+              "inputDataFieldName": "file"
+            },
+            {
+              "name": "language",
+              "value": "eng"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        224,
+        0
+      ],
+      "id": "2acc7aee-b7d7-494c-a367-2d8039eb852a",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "be2d254e-97ae-48b4-9054-8a904219a88a",
+              "name": "raw_text",
+              "value": "={{$json[\"ParsedResults\"][0][\"ParsedText\"]}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        448,
+        0
+      ],
+      "id": "7d0fe6aa-e50a-4c9e-829d-4526de18cf4c",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=AIzaSyDicG-eFn_RP6s_qMBuXoAsCEUnxcXkmQ0",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\"contents\": [{\"parts\": [{\"text\": \"Extract the following fields from the visiting card text.\\nIf any value is missing, return \\\"None\\\".\\n\\nFields:\\nFull Name\\nCompany Name\\nAddress\\nCity\\nState\\nCountry\\nMobile Number\\nEmail ID\\nBusiness Category\\nIndustry Sector\\nInsight (Short business insight about collaboration potential)\\n\\nReturn ONLY valid JSON.\\n\\nText:\\n\" + $json.raw_text}]}]} }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        672,
+        0
+      ],
+      "id": "51d115d1-b3bd-44a5-8c28-d2edc0ee3a3c",
+      "name": "HTTP Request1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// --------- VISITING CARD VALIDATION (Business Lead Validation) ----------\n\n// Get parsed AI data\nconst rawText =\n  $json.text ||\n  $json.candidates?.[0]?.content?.parts?.[0]?.text ||\n  \"\";\n\nconst cleanText = rawText\n  .replace(/```json/g, \"\")\n  .replace(/```/g, \"\")\n  .trim();\n\nlet parsed;\n\ntry {\n  parsed = JSON.parse(cleanText);\n} catch (e) {\n  parsed = {};\n}\n\n// Extract fields\nconst fullName = parsed[\"Full Name\"] || \"\";\nconst email = parsed[\"Email ID\"] || \"\";\nconst mobile = parsed[\"Mobile Number\"] || \"\";\nconst company = parsed[\"Company Name\"] || \"\";\n\n// --------- VALIDATION RULES (For Business Visiting Card) ----------\nfunction isValidEmail(email) {\n  return /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email);\n}\n\nfunction isValidPhone(phone) {\n  const cleaned = String(phone).replace(/\\D/g, \"\");\n  return cleaned.length >= 8 && cleaned.length <= 15;\n}\n\nfunction isValidName(name) {\n  return name && name.length >= 3 && name !== \"None\";\n}\n\n// Check if visiting card has minimum business info\nconst isBusinessCardValid =\n  isValidName(fullName) &&\n  (isValidEmail(email) || isValidPhone(mobile));\n\n// --------- IF INVALID VISITING CARD → STOP STORAGE ----------\nif (!isBusinessCardValid) {\n  return [\n    {\n      json: {\n        error: true,\n        message: \"Invalid Visiting Card (Missing Name & Contact Info)\",\n        cardType: \"Invalid Business Card\"\n      }\n    }\n  ];\n}\n\n// --------- VALID VISITING CARD → CONTINUE PIPELINE ----------\nreturn [\n  {\n    json: {\n      \"Full Name\": fullName || \"None\",\n      \"Company Name\": company || \"None\",\n      \"Address\": parsed[\"Address\"] || \"None\",\n      \"City\": parsed[\"City\"] || \"None\",\n      \"State\": parsed[\"State\"] || \"None\",\n      \"Country\": parsed[\"Country\"] || \"None\",\n      \"Mobile Number\": mobile || \"None\",\n      \"Email ID\": email || \"None\",\n      \"Business Category\": parsed[\"Business Category\"] || \"None\",\n      \"Industry Sector\": parsed[\"Industry Sector\"] || \"None\",\n      \"Insight\": parsed[\"Insight\"] || \"Valid Business Lead\",\n      \"cardValid\": true,\n      \"Pipeline Stage\": \"Captured\",\n      \"Status\": \"Pending Approval\"\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        16
+      ],
+      "id": "0f50f453-c996-482a-bf82-81df7311c2d8",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1vmKueLKeSFxgXAbGGzBbgfDoR3a-NHfIXO_X1j89aQg",
+          "mode": "list",
+          "cachedResultName": "LeadGenius_AI",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1vmKueLKeSFxgXAbGGzBbgfDoR3a-NHfIXO_X1j89aQg/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1vmKueLKeSFxgXAbGGzBbgfDoR3a-NHfIXO_X1j89aQg/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {
+            "Event Name": "={{$json[\"Event Name\"]}}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Full Name",
+              "displayName": "Full Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Company Name",
+              "displayName": "Company Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Address",
+              "displayName": "Address",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "City",
+              "displayName": "City",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "State",
+              "displayName": "State",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Country",
+              "displayName": "Country",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Mobile Number",
+              "displayName": "Mobile Number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Email ID",
+              "displayName": "Email ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Business Category",
+              "displayName": "Business Category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Industry Sector",
+              "displayName": "Industry Sector",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Insight",
+              "displayName": "Insight",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Event Name",
+              "displayName": "Event Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Event Location",
+              "displayName": "Event Location",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Pipeline Stage",
+              "displayName": "Pipeline Stage",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "e2cdc454-fb7c-48b6-81fd-1f8fc44673cf",
+      "name": "Store New Lead",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1232,
+        48
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "6Ww4je1dIezTLTSu",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1vmKueLKeSFxgXAbGGzBbgfDoR3a-NHfIXO_X1j89aQg",
+          "mode": "list",
+          "cachedResultName": "LeadGenius_AI",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1vmKueLKeSFxgXAbGGzBbgfDoR3a-NHfIXO_X1j89aQg/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1vmKueLKeSFxgXAbGGzBbgfDoR3a-NHfIXO_X1j89aQg/edit#gid=0"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1520,
+        256
+      ],
+      "id": "99febff6-af76-4b91-9419-5cd7d4836bed",
+      "name": "Get row(s) in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "Pcrltdk7L2sY2wl3",
+          "name": "Google Sheets account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const seen = new Set();\nconst uniqueRows = [];\n\nfor (const item of items) {\n  const email = item.json[\"Email ID\"];\n  \n  if (!seen.has(email)) {\n    seen.add(email);\n    uniqueRows.push(item);\n  }\n}\n\nreturn uniqueRows;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1728,
+        256
+      ],
+      "id": "402e8e2d-9cc5-4e63-a44e-aa0dc7348cb9",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "operation": "clear",
+        "documentId": {
+          "__rl": true,
+          "value": "1vmKueLKeSFxgXAbGGzBbgfDoR3a-NHfIXO_X1j89aQg",
+          "mode": "list",
+          "cachedResultName": "LeadGenius_AI",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1vmKueLKeSFxgXAbGGzBbgfDoR3a-NHfIXO_X1j89aQg/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1vmKueLKeSFxgXAbGGzBbgfDoR3a-NHfIXO_X1j89aQg/edit#gid=0"
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1888,
+        240
+      ],
+      "id": "248e13e9-0368-4e50-abb9-3465b58cece4",
+      "name": "Clear sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "Pcrltdk7L2sY2wl3",
+          "name": "Google Sheets account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1vmKueLKeSFxgXAbGGzBbgfDoR3a-NHfIXO_X1j89aQg",
+          "mode": "list",
+          "cachedResultName": "LeadGenius_AI",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1vmKueLKeSFxgXAbGGzBbgfDoR3a-NHfIXO_X1j89aQg/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1vmKueLKeSFxgXAbGGzBbgfDoR3a-NHfIXO_X1j89aQg/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Full Name",
+              "displayName": "Full Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Company Name",
+              "displayName": "Company Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Address",
+              "displayName": "Address",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "City",
+              "displayName": "City",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "State",
+              "displayName": "State",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Country",
+              "displayName": "Country",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Mobile Number",
+              "displayName": "Mobile Number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Email ID",
+              "displayName": "Email ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Business Category",
+              "displayName": "Business Category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Industry Sector",
+              "displayName": "Industry Sector",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Insight",
+              "displayName": "Insight",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Event Name",
+              "displayName": "Event Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Event Location",
+              "displayName": "Event Location",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Pipeline Stage",
+              "displayName": "Pipeline Stage",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2096,
+        240
+      ],
+      "id": "57a81b13-1569-403c-aa81-6162ede88c23",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "Pcrltdk7L2sY2wl3",
+          "name": "Google Sheets account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "41063e4f-51f4-4350-a919-e32e05199e09",
+              "leftValue": "={{ $json.cardValid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {
+          "ignoreCase": false
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1072,
+        256
+      ],
+      "id": "0267a9a2-e8e6-48cc-ada5-e27fbab85105",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"status\": \"error\",\n  \"message\": \"Invalid Card Number - Data Not Stored\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1136,
+        448
+      ],
+      "id": "46f47347-7e41-447b-a615-61f99a86c7ed",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"status\": \"Successfull\",\n  \"message\": \"valid Card Number\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2320,
+        320
+      ],
+      "id": "3499e769-535f-4181-8b0a-da80628e4ec5",
+      "name": "Respond to Webhook1"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store New Lead": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Clear sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clear sheet": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Store New Lead",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "c4469b5d-44cd-4e41-bee4-745743673c26",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2a1932cc2167540e3f3e806f7c500ed29a12f98da5adbd2936120719c4c55d6e"
+  },
+  "id": "VlLzy2hFJfEatunu",
+  "tags": []
+}
